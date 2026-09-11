@@ -32,7 +32,6 @@ is_left_clicking = False
 is_right_clicking = False
 action_cooldown = 0  
 is_tracking = True  
-
 prev_gesture = -1
 gesture_start_x = 0
 
@@ -52,118 +51,121 @@ gesture_names = {
     5: "Mission Control / Task View (Surfer)"
 }
 
-print("--- SMART MOUSE V5 (CROSS-PLATFORM) ONLINE ---")
+print("--- SMART MOUSE V6 (DRAG SUPPORT + CRASH SAFE) ONLINE ---")
 
-while True:
-    success, frame = cap.read()
-    if not success: break
-    frame = cv2.flip(frame, 1)
-    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    results = tracker.process(rgb_frame)
+try:
+    while True:
+        success, frame = cap.read()
+        if not success: break
+        frame = cv2.flip(frame, 1)
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = tracker.process(rgb_frame)
 
-    if results.multi_hand_landmarks:
-        hand = results.multi_hand_landmarks[0]
-        mp_draw.draw_landmarks(frame, hand, mp_hands.HAND_CONNECTIONS)
-        
-        # --- DRAW THE DEAD ZONE BOX ---
-        cam_h, cam_w, _ = frame.shape
-        box_x1, box_y1 = int(margin * cam_w), int(margin * cam_h)
-        box_x2, box_y2 = int((1 - margin) * cam_w), int((1 - margin) * cam_h)
-        cv2.rectangle(frame, (box_x1, box_y1), (box_x2, box_y2), (255, 0, 255), 2)
-        
-        if is_tracking:
-            wrist_x = hand.landmark[0].x
-            wrist_y = hand.landmark[0].y
-            wrist_z = hand.landmark[0].z
+        if results.multi_hand_landmarks:
+            hand = results.multi_hand_landmarks[0]
+            mp_draw.draw_landmarks(frame, hand, mp_hands.HAND_CONNECTIONS)
             
-            scale = math.hypot(hand.landmark[9].x - wrist_x, hand.landmark[9].y - wrist_y)
-            if scale == 0: scale = 0.0001
+            cam_h, cam_w, _ = frame.shape
+            box_x1, box_y1 = int(margin * cam_w), int(margin * cam_h)
+            box_x2, box_y2 = int((1 - margin) * cam_w), int((1 - margin) * cam_h)
+            cv2.rectangle(frame, (box_x1, box_y1), (box_x2, box_y2), (255, 0, 255), 2)
             
-            row = []
-            for lm in hand.landmark:
-                row.extend([(lm.x - wrist_x) / scale, (lm.y - wrist_y) / scale, (lm.z - wrist_z) / scale])
+            if is_tracking:
+                wrist_x = hand.landmark[0].x
+                wrist_y = hand.landmark[0].y
+                wrist_z = hand.landmark[0].z
                 
-            gesture = model.predict([row])[0]
-            cv2.putText(frame, f"AI Sees: {gesture_names[gesture]}", (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-
-            index_finger_tip = hand.landmark[8]
-            x_percentage = max(0.0, min(1.0, (index_finger_tip.x - margin) / (1.0 - margin * 2)))
-            y_percentage = max(0.0, min(1.0, (index_finger_tip.y - margin) / (1.0 - margin * 2)))
-
-            target_x = x_percentage * screen_width
-            target_y = y_percentage * screen_height
-            
-            if prev_x == 0 and prev_y == 0:
-                prev_x, prev_y = target_x, target_y
+                scale = math.hypot(hand.landmark[9].x - wrist_x, hand.landmark[9].y - wrist_y)
+                if scale == 0: scale = 0.0001
                 
-            curr_x = prev_x + (target_x - prev_x) / smooth
-            curr_y = prev_y + (target_y - prev_y) / smooth
-            
-            dy = prev_y - curr_y 
+                row = []
+                for lm in hand.landmark:
+                    row.extend([(lm.x - wrist_x) / scale, (lm.y - wrist_y) / scale, (lm.z - wrist_z) / scale])
+                    
+                gesture = model.predict([row])[0]
+                cv2.putText(frame, f"AI Sees: {gesture_names.get(gesture, 'Unknown')}", (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
-            if gesture != prev_gesture:
-                gesture_start_x = curr_x
+                index_finger_tip = hand.landmark[8]
+                x_percentage = max(0.0, min(1.0, (index_finger_tip.x - margin) / (1.0 - margin * 2)))
+                y_percentage = max(0.0, min(1.0, (index_finger_tip.y - margin) / (1.0 - margin * 2)))
 
-            if gesture == 0: 
-                mouse.position = (int(curr_x), int(curr_y))
+                target_x = x_percentage * screen_width
+                target_y = y_percentage * screen_height
                 
-            elif gesture == 1: 
-                mouse.position = (int(curr_x), int(curr_y)) 
-                if not is_left_clicking:
-                    mouse.click(Button.left, 1)
-                    is_left_clicking = True
+                if prev_x == 0 and prev_y == 0:
+                    prev_x, prev_y = target_x, target_y
                     
-            elif gesture == 2: 
-                if not is_right_clicking:
-                    mouse.click(Button.right, 1)
-                    is_right_clicking = True
+                curr_x = prev_x + (target_x - prev_x) / smooth
+                curr_y = prev_y + (target_y - prev_y) / smooth
+                
+                dy = prev_y - curr_y 
+
+                if gesture != prev_gesture:
+                    gesture_start_x = curr_x
+
+                if gesture == 0: 
+                    mouse.position = (int(curr_x), int(curr_y))
                     
-            elif gesture == 3: 
-                if abs(dy) > 1.0: 
-                    mouse.scroll(0, dy / 5.0)
-                    
-            elif gesture == 4: 
-                if time.time() > action_cooldown:
-                    swipe_distance = curr_x - gesture_start_x
-                    
-                    if swipe_distance > 150:  
-                        print(">>> SWIPED RIGHT <<<")
-                        if CURRENT_OS == "Darwin":
-                            os.system('''osascript -e 'tell application "System Events" to key code 124 using control down' ''')
-                        elif CURRENT_OS == "Windows":
-                            pyautogui.hotkey('ctrl', 'win', 'right')
-                        action_cooldown = time.time() + 1.0 
-                        gesture_start_x = curr_x
+                elif gesture == 1: 
+                    mouse.position = (int(curr_x), int(curr_y)) 
+                    if not is_left_clicking:
+                        mouse.press(Button.left) # FIX: Holds the click down so you can drag!
+                        is_left_clicking = True
                         
-                    elif swipe_distance < -150: 
-                        print(">>> SWIPED LEFT <<<")
-                        if CURRENT_OS == "Darwin":
-                            os.system('''osascript -e 'tell application "System Events" to key code 123 using control down' ''')
-                        elif CURRENT_OS == "Windows":
-                            pyautogui.hotkey('ctrl', 'win', 'left')
-                        action_cooldown = time.time() + 1.0
-                        gesture_start_x = curr_x
+                elif gesture == 2: 
+                    if not is_right_clicking:
+                        mouse.click(Button.right, 1) # Right click doesn't need to drag
+                        is_right_clicking = True
                         
-            elif gesture == 5: 
-                if time.time() > action_cooldown:
-                    if CURRENT_OS == "Darwin":
-                        os.system('open -a "Mission Control"')
-                    elif CURRENT_OS == "Windows":
-                        pyautogui.hotkey('win', 'tab')
-                    action_cooldown = time.time() + 2.0 
+                elif gesture == 3: 
+                    if abs(dy) > 1.0: 
+                        mouse.scroll(0, dy / 5.0)
+                        
+                elif gesture == 4: 
+                    if time.time() > action_cooldown:
+                        swipe_distance = curr_x - gesture_start_x
+                        if swipe_distance > 150:  
+                            if CURRENT_OS == "Darwin":
+                                os.system('''osascript -e 'tell application "System Events" to key code 124 using control down' ''')
+                            elif CURRENT_OS == "Windows":
+                                pyautogui.hotkey('ctrl', 'win', 'right')
+                            action_cooldown = time.time() + 1.0 
+                            gesture_start_x = curr_x
+                        elif swipe_distance < -150: 
+                            if CURRENT_OS == "Darwin":
+                                os.system('''osascript -e 'tell application "System Events" to key code 123 using control down' ''')
+                            elif CURRENT_OS == "Windows":
+                                pyautogui.hotkey('ctrl', 'win', 'left')
+                            action_cooldown = time.time() + 1.0
+                            gesture_start_x = curr_x
+                            
+                elif gesture == 5: 
+                    if time.time() > action_cooldown:
+                        if CURRENT_OS == "Darwin":
+                            os.system('open -a "Mission Control"')
+                        elif CURRENT_OS == "Windows":
+                            pyautogui.hotkey('win', 'tab')
+                        action_cooldown = time.time() + 2.0 
 
-            if gesture != 1: is_left_clicking = False
-            if gesture != 2: is_right_clicking = False
-            
-            prev_x, prev_y = curr_x, curr_y
-            prev_gesture = gesture
-            
-        else:
-            cv2.putText(frame, "PAUSED (Press Ctrl+Shift+H)", (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                # FIX: Release the mouse when you stop making the OK Sign!
+                if gesture != 1 and is_left_clicking:
+                    mouse.release(Button.left)
+                    is_left_clicking = False
+                    
+                if gesture != 2 and is_right_clicking:
+                    is_right_clicking = False
+                
+                prev_x, prev_y = curr_x, curr_y
+                prev_gesture = gesture
+                
+            else:
+                cv2.putText(frame, "PAUSED (Press Ctrl+Shift+H)", (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
 
-    small_frame = cv2.resize(frame, (400, 250)) 
-    cv2.imshow("Hand Mouse", small_frame)
-    if cv2.waitKey(1) & 0xFF == ord('q'): break
+        small_frame = cv2.resize(frame, (400, 250)) 
+        cv2.imshow("Hand Mouse", small_frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'): break
 
-cap.release()
-cv2.destroyAllWindows()
+# FIX: No matter how it crashes, turn off the webcam!
+finally:
+    cap.release()
+    cv2.destroyAllWindows()
