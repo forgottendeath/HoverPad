@@ -16,7 +16,10 @@ mouse = MouseController()
 keyboard_sim = KeyboardController()
 screen_width, screen_height = pyautogui.size()
 
-with open('gesture_model.pkl', 'rb') as f:
+# Ensure it always finds the model regardless of where the terminal is opened
+script_dir = os.path.dirname(os.path.abspath(__file__))
+model_path = os.path.join(script_dir, 'gesture_model.pkl')
+with open(model_path, 'rb') as f:
     model = pickle.load(f)
 
 cap = cv2.VideoCapture(0)
