@@ -39,6 +39,8 @@ prev_gesture = -1
 gesture_start_x = 0
 click_anchor_x = 0
 click_anchor_y = 0
+last_click_time = 0
+is_double_pinching = False
 
 def toggle_tracking():
     global is_tracking
