@@ -37,6 +37,8 @@ action_cooldown = 0
 is_tracking = True  
 prev_gesture = -1
 gesture_start_x = 0
+click_anchor_x = 0
+click_anchor_y = 0
 
 def toggle_tracking():
     global is_tracking
