@@ -8,6 +8,9 @@ import pickle
 import time
 import os
 import math 
+import platform
+
+CURRENT_OS = platform.system()
 
 mouse = MouseController()
 keyboard_sim = KeyboardController()
@@ -23,14 +26,13 @@ tracker = mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.5, min_trac
 
 prev_x, prev_y = 0, 0
 smooth = 5
-margin = 0.05  # Lowered margin so the mouse is more precise
+margin = 0.05
 
 is_left_clicking = False
 is_right_clicking = False
 action_cooldown = 0  
 is_tracking = True  
 
-# NEW: Anchor variables for swiping!
 prev_gesture = -1
 gesture_start_x = 0
 
@@ -47,10 +49,10 @@ gesture_names = {
     2: "Right Click (Fist)", 
     3: "Scroll (Peace)", 
     4: "Desktops (Thumbs Up)", 
-    5: "Mission Control (Surfer)"
+    5: "Mission Control / Task View (Surfer)"
 }
 
-print("--- SMART MOUSE V4 (ANCHOR SWIPES) ONLINE ---")
+print("--- SMART MOUSE V5 (CROSS-PLATFORM) ONLINE ---")
 
 while True:
     success, frame = cap.read()
@@ -62,6 +64,12 @@ while True:
     if results.multi_hand_landmarks:
         hand = results.multi_hand_landmarks[0]
         mp_draw.draw_landmarks(frame, hand, mp_hands.HAND_CONNECTIONS)
+        
+        # --- DRAW THE DEAD ZONE BOX ---
+        cam_h, cam_w, _ = frame.shape
+        box_x1, box_y1 = int(margin * cam_w), int(margin * cam_h)
+        box_x2, box_y2 = int((1 - margin) * cam_w), int((1 - margin) * cam_h)
+        cv2.rectangle(frame, (box_x1, box_y1), (box_x2, box_y2), (255, 0, 255), 2)
         
         if is_tracking:
             wrist_x = hand.landmark[0].x
@@ -93,8 +101,6 @@ while True:
             
             dy = prev_y - curr_y 
 
-            # --- THE ANCHOR LOGIC ---
-            # If the gesture just changed THIS FRAME, drop the anchor!
             if gesture != prev_gesture:
                 gesture_start_x = curr_x
 
@@ -118,31 +124,39 @@ while True:
                     
             elif gesture == 4: 
                 if time.time() > action_cooldown:
-                    # Calculate how far you moved from the Anchor Point (150 pixels)
                     swipe_distance = curr_x - gesture_start_x
                     
                     if swipe_distance > 150:  
                         print(">>> SWIPED RIGHT <<<")
-                        os.system('''osascript -e 'tell application "System Events" to key code 124 using control down' ''')
+                        if CURRENT_OS == "Darwin":
+                            os.system('''osascript -e 'tell application "System Events" to key code 124 using control down' ''')
+                        elif CURRENT_OS == "Windows":
+                            pyautogui.hotkey('ctrl', 'win', 'right')
                         action_cooldown = time.time() + 1.0 
-                        gesture_start_x = curr_x # Reset the anchor so it doesn't double-trigger!
+                        gesture_start_x = curr_x
                         
                     elif swipe_distance < -150: 
                         print(">>> SWIPED LEFT <<<")
-                        os.system('''osascript -e 'tell application "System Events" to key code 123 using control down' ''')
+                        if CURRENT_OS == "Darwin":
+                            os.system('''osascript -e 'tell application "System Events" to key code 123 using control down' ''')
+                        elif CURRENT_OS == "Windows":
+                            pyautogui.hotkey('ctrl', 'win', 'left')
                         action_cooldown = time.time() + 1.0
                         gesture_start_x = curr_x
                         
             elif gesture == 5: 
                 if time.time() > action_cooldown:
-                    os.system('open -a "Mission Control"')
+                    if CURRENT_OS == "Darwin":
+                        os.system('open -a "Mission Control"')
+                    elif CURRENT_OS == "Windows":
+                        pyautogui.hotkey('win', 'tab')
                     action_cooldown = time.time() + 2.0 
 
             if gesture != 1: is_left_clicking = False
             if gesture != 2: is_right_clicking = False
             
             prev_x, prev_y = curr_x, curr_y
-            prev_gesture = gesture # Save the gesture for the next frame
+            prev_gesture = gesture
             
         else:
             cv2.putText(frame, "PAUSED (Press Ctrl+Shift+H)", (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
