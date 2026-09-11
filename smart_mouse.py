@@ -37,6 +37,7 @@ action_cooldown = 0
 is_tracking = True  
 prev_gesture = -1
 gesture_start_x = 0
+
 click_anchor_x = 0
 click_anchor_y = 0
 last_click_time = 0
@@ -58,7 +59,7 @@ gesture_names = {
     5: "Mission Control / Task View (Surfer)"
 }
 
-print("--- SMART MOUSE V6 (DRAG SUPPORT + CRASH SAFE) ONLINE ---")
+print("--- SMART MOUSE V7 (PERFECT DOUBLE-TAP DRAG) ONLINE ---")
 
 try:
     while True:
@@ -110,18 +111,42 @@ try:
                 if gesture != prev_gesture:
                     gesture_start_x = curr_x
 
+                # 1. ALWAYS release the mouse BEFORE processing new movements!
+                if gesture != 1 and is_left_clicking:
+                    mouse.release(Button.left)
+                    is_left_clicking = False
+                    
+                if gesture != 2 and is_right_clicking:
+                    is_right_clicking = False
+
+                # 2. Now process the current gesture
                 if gesture == 0: 
                     mouse.position = (int(curr_x), int(curr_y))
                     
                 elif gesture == 1: 
-                    mouse.position = (int(curr_x), int(curr_y)) 
                     if not is_left_clicking:
-                        mouse.press(Button.left) # FIX: Holds the click down so you can drag!
+                        # Determine if this is a single click or a double-pinch drag!
+                        if time.time() - last_click_time < 0.5:
+                            is_double_pinching = True
+                        else:
+                            is_double_pinching = False
+                            
+                        mouse.press(Button.left) 
                         is_left_clicking = True
+                        click_anchor_x = curr_x
+                        click_anchor_y = curr_y
+                        last_click_time = time.time()
+                        
+                    if is_double_pinching:
+                        # Unlock the anchor! Mouse follows your hand so you can drag.
+                        mouse.position = (int(curr_x), int(curr_y))
+                    else:
+                        # Lock the anchor! Keep the mouse perfectly still so the Mac registers a flawless single click.
+                        mouse.position = (int(click_anchor_x), int(click_anchor_y))
                         
                 elif gesture == 2: 
                     if not is_right_clicking:
-                        mouse.click(Button.right, 1) # Right click doesn't need to drag
+                        mouse.click(Button.right, 1) 
                         is_right_clicking = True
                         
                 elif gesture == 3: 
@@ -153,14 +178,6 @@ try:
                         elif CURRENT_OS == "Windows":
                             pyautogui.hotkey('win', 'tab')
                         action_cooldown = time.time() + 2.0 
-
-                # FIX: Release the mouse when you stop making the OK Sign!
-                if gesture != 1 and is_left_clicking:
-                    mouse.release(Button.left)
-                    is_left_clicking = False
-                    
-                if gesture != 2 and is_right_clicking:
-                    is_right_clicking = False
                 
                 prev_x, prev_y = curr_x, curr_y
                 prev_gesture = gesture
@@ -169,10 +186,9 @@ try:
                 cv2.putText(frame, "PAUSED (Press Ctrl+Shift+H)", (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
 
         small_frame = cv2.resize(frame, (400, 250)) 
-        cv2.imshow("Hand Mouse", small_frame)
+        cv2.imshow("HoverPad", small_frame)
         if cv2.waitKey(1) & 0xFF == ord('q'): break
 
-# FIX: No matter how it crashes, turn off the webcam!
 finally:
     cap.release()
     cv2.destroyAllWindows()
