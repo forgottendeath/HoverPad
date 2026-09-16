@@ -13,7 +13,7 @@ Ditch your physical mouse. HoverPad uses your webcam and real-time machine learn
 
 1. Clone this repository to your machine:
 ```bash
-git clone https://github.com/YOUR_USERNAME/HoverPad.git
+git clone https://github.com/forgottendeath/HoverPad.git
 cd HoverPad
 ```
 
